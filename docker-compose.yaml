@@ -1,0 +1,59 @@
+name: ${STACK_NAME:-ligolo-ng-aio}
+
+x-build-args: &x-build-args
+  WEBUI_REF: "${WEBUI_REF:-master}"
+  LIGOLO_VERSION: "${LIGOLO_VERSION:-latest}"
+
+x-env: &x-env
+  LIGOLO_ARGS: "${LIGOLO_ARGS:--selfcert}"
+  LIGOLO_VERSION: "${LIGOLO_VERSION:-latest}"
+
+x-image: &x-image
+  image: "${IMAGE_NAME:-ligolo-aio}:${IMAGE_TAG:-${LIGOLO_VERSION:-latest}}"
+
+x-service-base: &x-service-base
+  <<: *x-image
+  environment:
+    <<: *x-env
+  tty: true
+  stdin_open: true
+  volumes:
+    # Override default configuration with custom contents. Note the template requirements!
+    # - ./ligolo-ng.yaml:/opt/ligolo-ng/ligolo-ng.yaml
+    - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  cap_add:
+    - NET_ADMIN
+  devices:
+    - /dev/net/tun:/dev/net/tun
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/ >/dev/null || exit 1"]
+    interval: 30s
+    timeout: 5s
+    start_period: 15s
+    retries: 5
+
+services:
+  ligolo-ng:
+    <<: *x-service-base
+    build:
+      context: .
+      args:
+        <<: *x-build-args
+    container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}"
+    networks:
+      - ligolo-net
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8000}:8000"
+      - "${AGENT_PORT:-11601}:11601"
+
+  ligolo-ng-hostnet:
+    <<: *x-service-base
+    profiles: ["hostnet"]
+    container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}"
+    network_mode: host
+
+networks:
+  ligolo-net:
+    name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}-net"
+    driver: bridge
