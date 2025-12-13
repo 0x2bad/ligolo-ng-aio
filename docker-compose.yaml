@@ -20,7 +20,7 @@ x-service-base: &x-service-base
   volumes:
     # Override default configuration with custom contents. Note the template requirements!
     # - ./ligolo-ng.yaml:/opt/ligolo-ng/ligolo-ng.yaml
-    - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
   cap_add:
     - NET_ADMIN
   devices:
@@ -37,7 +37,7 @@ services:
   ligolo-ng:
     <<: *x-service-base
     build:
-      context: .
+      context: ./build
       args:
         <<: *x-build-args
     container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}"
@@ -46,14 +46,22 @@ services:
     ports:
       - "127.0.0.1:${HTTP_PORT:-8000}:8000"
       - "${AGENT_PORT:-11601}:11601"
+    profiles: ["default"]
 
   ligolo-ng-hostnet:
     <<: *x-service-base
     profiles: ["hostnet"]
-    container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}"
+    container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}-hostnet"
     network_mode: host
+
 
 networks:
   ligolo-net:
     name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}-net"
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        # NOTE: We are using CGNAT range for the ligolo container to avoid IP conflicts when targeting internal networks
+        - subnet: 100.96.10.0/24
+          gateway: 100.96.10.1

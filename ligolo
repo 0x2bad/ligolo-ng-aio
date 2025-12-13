@@ -1,0 +1,96 @@
+#!/bin/bash
+
+SCRIPT_PATH="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+
+# Ensure we're in the correct directory
+cd "$SCRIPT_DIR" || { echo "Failed to change to script directory."; exit 1; }
+
+# Check for required files
+if [[ ! -f "docker-compose.yaml" ]]; then
+  echo "docker-compose.yaml not found in $SCRIPT_DIR."
+  exit 1
+fi
+
+CONTAINER_NAME="${CONTAINER_NAME:-ligolo-ng-aio}"
+PROFILE="${PROFILE:-default}"
+
+usage() {
+  echo "Usage: $0 {start|stop|status|nsenter|attach} [--hostnet] [--help|-h]"
+  echo "  start      Start the container (use --hostnet for host networking)"
+  echo "  stop       Stop the container"
+  echo "  status     Show container status"
+  echo "  nsenter    Enter the container's network namespace (required when using default profile)"
+  echo "  attach     Attach to the Ligolo-ng CLI"
+  echo ""
+  echo "  --help|-h  Show this help message"
+  exit 1
+}
+
+if [[ $EUID -ne 0 ]]; then
+  sudo "$0" "$@"
+  exit $?
+fi
+
+command -v docker >/dev/null || { echo "Docker not found."; exit 1; }
+
+if [[ $# -lt 1 ]]; then
+  usage
+fi
+
+ACTION="$1"
+shift
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --hostnet)
+      PROFILE="hostnet"
+      ;;
+    --help|-h)
+      usage
+      ;;
+    *)
+      usage
+      ;;
+  esac
+  shift
+done
+
+case "$ACTION" in
+  start)
+    docker compose --profile $PROFILE up -d
+    if [[ "$PROFILE" == "hostnet" ]]; then
+      CONTAINER_NAME="${CONTAINER_NAME}-hostnet"
+    fi
+    echo "Container started."
+    echo "To enter the namespace, run (with sudo):"
+    echo "  sudo $(basename "$0") nsenter"
+    ;;
+  stop)
+    docker compose down
+    ;;
+  status)
+    if [[ "$PROFILE" == "hostnet" ]]; then
+      CONTAINER_NAME="${CONTAINER_NAME}-hostnet"
+    fi
+    docker ps --filter "name=$CONTAINER_NAME"
+    ;;
+  nsenter)
+    command -v nsenter >/dev/null || { echo "nsenter not found (install util-linux)."; exit 1; }
+    if [[ "$PROFILE" == "hostnet" ]]; then
+      CONTAINER_NAME="${CONTAINER_NAME}-hostnet"
+    fi
+    PID=$(docker inspect -f '{{.State.Pid}}' "$CONTAINER_NAME")
+    if [[ -z "$PID" || "$PID" == "0" ]]; then
+      echo "Container not running or not found."
+      exit 1
+    fi
+    nsenter -t "$PID" -n bash
+    ;;
+  attach)
+    docker compose --profile $PROFILE attach ligolo-ng
+    ;;
+  *)
+    usage
+    ;;
+esac
