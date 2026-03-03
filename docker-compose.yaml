@@ -4,28 +4,40 @@ x-build-args: &x-build-args
   WEBUI_REF: "${WEBUI_REF:-master}"
   LIGOLO_VERSION: "${LIGOLO_VERSION:-latest}"
 
-x-env: &x-env
-  LIGOLO_ARGS: "${LIGOLO_ARGS:--selfcert}"
-  LIGOLO_VERSION: "${LIGOLO_VERSION:-latest}"
-
-x-image: &x-image
-  image: "${IMAGE_NAME:-ligolo-aio}:${IMAGE_TAG:-${LIGOLO_VERSION:-latest}}"
-
 x-service-base: &x-service-base
-  <<: *x-image
   environment:
-    <<: *x-env
+    LIGOLO_ARGS: "${LIGOLO_ARGS:-selfcert}"
+    LIGOLO_VERSION: "${LIGOLO_VERSION:-latest}"
   tty: true
   stdin_open: true
-  volumes:
-    # Override default configuration with custom contents. Note the template requirements!
+  # volumes:
+    # Override default configuration with custom contents.
     # - ./ligolo-ng.yaml:/opt/ligolo-ng/ligolo-ng.yaml
-    - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+    # - ./configs/nginx.conf:/etc/nginx/nginx.conf:ro
   cap_add:
     - NET_ADMIN
   devices:
     - /dev/net/tun:/dev/net/tun
+  container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}"
   restart: unless-stopped
+
+x-service-cli: &x-service-cli
+  image: "ligolo-aio-cli:${IMAGE_TAG:-${LIGOLO_VERSION:-latest}}"
+  <<: *x-service-base
+  build:
+    context: ./build
+    target: cli
+    args:
+      <<: *x-build-args
+
+x-service-full: &x-service-full
+  image: "ligolo-aio-full:${IMAGE_TAG:-${LIGOLO_VERSION:-latest}}"
+  <<: *x-service-base
+  build:
+    context: ./build
+    target: full
+    args:
+      <<: *x-build-args
   healthcheck:
     test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/ >/dev/null || exit 1"]
     interval: 30s
@@ -34,30 +46,41 @@ x-service-base: &x-service-base
     retries: 5
 
 services:
-  ligolo-ng:
-    <<: *x-service-base
-    build:
-      context: ./build
-      args:
-        <<: *x-build-args
-    container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}"
+  ligolo-ng-full-bridge:
+    <<: *x-service-full
+    ports:
+        - "${WEBUI_HOST:-127.0.0.1}:${WEBUI_PORT:-8000}:${WEBUI_PORT_MAP:-8000}"
+        - "${AGENT_HOST:-0.0.0.0}:${AGENT_PORT:-11601}:${AGENT_PORT_MAP:-11601}"
     networks:
       - ligolo-net
+    container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-aio}}-full"
+    profiles: ["full-bridge"]
+
+  ligolo-ng-cli-bridge:
+    <<: *x-service-cli
     ports:
-      - "127.0.0.1:${HTTP_PORT:-8000}:8000"
-      - "${AGENT_PORT:-11601}:11601"
-    profiles: ["default"]
+      - "${AGENT_HOST:-0.0.0.0}:${AGENT_PORT:-11601}:${AGENT_PORT_MAP:-11601}"
+    networks:
+      - ligolo-net
+    container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-aio}}-cli"
+    profiles: ["cli-bridge"]
 
-  ligolo-ng-hostnet:
-    <<: *x-service-base
-    profiles: ["hostnet"]
-    container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}-hostnet"
+  ligolo-ng-full-host:
+    <<: *x-service-full
     network_mode: host
+    container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-aio}}-full-host"
+    profiles: ["full-host"]
 
+  ligolo-ng-cli-host:
+    <<: *x-service-cli
+    network_mode: host
+    container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-aio}}-cli-host"
+    profiles: ["cli-host"]
+    
 
 networks:
   ligolo-net:
-    name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-ng-aio}}-net"
+    name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-aio}}-net"
     driver: bridge
     ipam:
       driver: default
