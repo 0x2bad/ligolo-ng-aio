@@ -10,46 +10,88 @@ The **Ligolo-ng All-in-One** project simplifies the deployment and management of
 
 ## Quick Start
 
-1. Clone the repo:
+### 1. Clone
 
-   ```bash
-   git clone https://github.com/0x2bad/ligolo-ng-aio.git
-   cd ligolo-ng-aio
-   ```
+```bash
+git clone https://github.com/0x2bad/ligolo-ng-aio.git
+cd ligolo-ng-aio
+```
 
-2. Start the container (default profile):
+### 2. Launch (default: Full Bridge mode)
 
-   ```bash
-   ./ligolo start
-   ```
+```bash
+./ligolo start
+```
 
-3. Access the web UI at `http://127.0.0.1:8000` and connect agents to port `11601`.
+Verify status:
 
-> [!NOTE]
-> When using the default profile, Ligolo-ng API is accessible via `http://127.0.0.1:8000` just like the web UI itself.
+```bash
+./ligolo status
+```
 
-4. Stop when done:
+### 3. Access the Interface
 
-   ```bash
-   ./ligolo stop
-   ```
+Web UI: `http://127.0.0.1:8000`
+
+Attach to CLI if needed:
+
+```bash
+./ligolo attach
+```
+
+### 4. Connect Agents
+
+Start your Ligolo-ng agents and confirm they appear in the web UI or CLI.
+
+### 5. Configure Routes
+
+Add routes via:
+
+* Web UI (recommended for visibility), or
+* CLI for advanced control
+
+If using **bridge mode**, access routed networks from the container namespace:
+
+```bash
+./ligolo nsenter
+```
+
+Manual alternative:
+
+```bash
+nsenter -t $(docker inspect -f '{{.State.Pid}}' ligolo-ng-aio) -n bash
+```
+
+### 6. Stop
+
+```bash
+./ligolo stop
+```
 
 ## Usage
 
-The `ligolo` script is the recommended way to manage the container. If using default profile, you can use the target routes by entering the container's network namespace with `nsenter`.
+> [!NOTE]
+> Provided wrapper script supports single instances. Running multiple instances may cause unexpected behavior. For multiple instances, consider using manual approach.
 
-```txt
-start      Start the container (use --hostnet for host networking)
+Use the `ligolo` script to manage all container variants. The script wraps Docker Compose and provides easy flags for different modes:
+Available command flags:
+
+```text
+start      Start the container
 stop       Stop the container
 status     Show container status
-nsenter    Enter the container's network namespace (required when using default profile)
-attach     Enter the Ligolo-ng CLI
+nsenter    Enter the container's network namespace (needed for bridge mode)
+attach     Attach to the Ligolo-ng CLI
 ```
 
-### Profiles
+### Profiles & Modes
 
-- **Default**: Ligolo interfaces are isolated in the container. Use `nsenter` to access routes from your host.
-- **Host Networking** (`--hostnet`): Container uses host network stack. Easier but less secure—restrict web UI access (see caution below).
+| Mode         | Network | Image Type | Command Example                  |
+| ------------ | ------- | ---------- | -------------------------------- |
+| Full Bridge  | Bridge  | Full       | `./ligolo start`                 |
+| Full Hostnet | Host    | Full       | `./ligolo start --hostnet`       |
+| CLI Bridge   | Bridge  | CLI Only   | `./ligolo start --cli`           |
+| CLI Hostnet  | Host    | CLI Only   | `./ligolo start --hostnet --cli` |
 
 > [!CAUTION]
 > In hostnet mode, update `config/nginx.conf` to bind the web UI to `127.0.0.1:8000` instead of `8000` to prevent external access:
@@ -62,68 +104,6 @@ attach     Enter the Ligolo-ng CLI
 > }
 > ```
 
-## Manual Docker Commands
-
-*If you prefer not to use the `ligolo` script.*
-
-### Default Profile
-
-```bash
-# Build
-docker compose build
-
-# Start
-docker compose up -d
-
-# Attach to CLI
-docker compose attach
-
-# Enter namespace
-nsenter -t $(docker inspect -f '{{.State.Pid}}' ligolo-ng-aio) -n bash
-
-# Stop
-docker compose down
-```
-
-### Host Networking Profile
-
-```bash
-# Start
-docker compose --profile hostnet up -d
-
-# Attach
-docker compose --profile hostnet attach
-
-# Stop
-docker compose down
-```
-
-### Direct Docker Run (Alternative)
-
-**Default Mode**:
-
-```bash
-docker run -it --rm \
-  --name ligolo-ng-aio \
-  --cap-add NET_ADMIN --device /dev/net/tun \
-  -p 127.0.0.1:8000:8000 -p 11601:11601 \
-  -v "$(pwd)/config/nginx.conf:/etc/nginx/nginx.conf:ro" \
-  -e LIGOLO_ARGS="-nobanner -selfcert" \
-  ligolo-ng-aio:latest
-```
-
-**Host Networking Mode**:
-
-```bash
-docker run -d \
-  --name ligolo-ng-aio \
-  --network host \
-  --cap-add NET_ADMIN --device /dev/net/tun \
-  -v "$(pwd)/config/nginx.conf:/etc/nginx/nginx.conf:ro" \
-  -e LIGOLO_ARGS="-nobanner -selfcert" \
-  ligolo-ng-aio:latest
-```
-
 ---
 
-Inspired by [ligolo-ng](https://github.com/nicocha30/ligolo-ng) and [ligolo-ng-web](https://github.com/nicocha30/ligolo-ng-web).
+Inspired by [ligolo-ng](https://github.com/nicocha30/ligolo-ng) & [ligolo-ng-web](https://github.com/nicocha30/ligolo-ng-web)
