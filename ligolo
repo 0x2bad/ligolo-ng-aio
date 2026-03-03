@@ -3,24 +3,23 @@
 SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 
-# Ensure we're in the correct directory
 cd "$SCRIPT_DIR" || { echo "Failed to change to script directory."; exit 1; }
 
-# Check for required files
 if [[ ! -f "docker-compose.yaml" ]]; then
   echo "docker-compose.yaml not found in $SCRIPT_DIR."
   exit 1
 fi
 
-CONTAINER_NAME="${CONTAINER_NAME:-ligolo-ng-aio}"
-PROFILE="${PROFILE:-default}"
+# feature flags
+HOSTNET=0
+CLI_BUILD=0
 
 usage() {
-  echo "Usage: $0 {start|stop|status|nsenter|attach} [--hostnet] [--help|-h]"
-  echo "  start      Start the container (use --hostnet for host networking)"
+  echo "Usage: $0 {start|stop|status|nsenter|attach} [--hostnet] [--cli] [--help|-h]"
+  echo "  start      Start the container (use flags to select variant)"
   echo "  stop       Stop the container"
   echo "  status     Show container status"
-  echo "  nsenter    Enter the container's network namespace (required when using default profile)"
+  echo "  nsenter    Enter the container's network namespace (needed for bridge mode)"
   echo "  attach     Attach to the Ligolo-ng CLI"
   echo ""
   echo "  --help|-h  Show this help message"
@@ -44,7 +43,10 @@ shift
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --hostnet)
-      PROFILE="hostnet"
+      HOSTNET=1
+      ;;
+    --cli)
+      CLI_BUILD=1
       ;;
     --help|-h)
       usage
@@ -56,31 +58,30 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+if [[ $CLI_BUILD -eq 1 && $HOSTNET -eq 1 ]]; then
+  PROFILE="cli-host"
+elif [[ $CLI_BUILD -eq 1 ]]; then
+  PROFILE="cli-bridge"
+elif [[ $HOSTNET -eq 1 ]]; then
+  PROFILE="full-host"
+else
+  PROFILE="full-bridge"
+fi
+
 case "$ACTION" in
   start)
-    docker compose --profile $PROFILE up -d
-    if [[ "$PROFILE" == "hostnet" ]]; then
-      CONTAINER_NAME="${CONTAINER_NAME}-hostnet"
-    fi
+    docker compose --profile "$PROFILE" up -d
     echo "Container started."
-    echo "To enter the namespace, run (with sudo):"
-    echo "  sudo $(basename "$0") nsenter"
     ;;
   stop)
-    docker compose down
+    docker compose --profile $(docker inspect $(docker compose ps --format '{{.Name}}') --format '{{ index .Config.Labels "com.docker.compose.service" }}' | rev | cut -d- -f1-2 | rev) down
     ;;
   status)
-    if [[ "$PROFILE" == "hostnet" ]]; then
-      CONTAINER_NAME="${CONTAINER_NAME}-hostnet"
-    fi
-    docker ps --filter "name=$CONTAINER_NAME"
+    docker compose ps -a
     ;;
   nsenter)
     command -v nsenter >/dev/null || { echo "nsenter not found (install util-linux)."; exit 1; }
-    if [[ "$PROFILE" == "hostnet" ]]; then
-      CONTAINER_NAME="${CONTAINER_NAME}-hostnet"
-    fi
-    PID=$(docker inspect -f '{{.State.Pid}}' "$CONTAINER_NAME")
+    PID=$(docker inspect -f '{{.State.Pid}}' "$(docker compose ps --format '{{.Name}}')")
     if [[ -z "$PID" || "$PID" == "0" ]]; then
       echo "Container not running or not found."
       exit 1
@@ -88,7 +89,7 @@ case "$ACTION" in
     nsenter -t "$PID" -n bash
     ;;
   attach)
-    docker compose --profile $PROFILE attach ligolo-ng
+    docker compose attach $(docker compose ps --format '{{.Service}}')
     ;;
   *)
     usage
