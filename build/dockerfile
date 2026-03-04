@@ -1,6 +1,7 @@
 FROM node:20-alpine AS webui-builder
 ARG WEBUI_REF=master
-ENV VITE_DEFAULT_API_URL=http://127.0.0.1:8000
+ARG VITE_API_URL=""
+ENV VITE_DEFAULT_API_URL=${VITE_API_URL}
 WORKDIR /web
 RUN apk add --no-cache git
 RUN git clone --depth=1 --branch "${WEBUI_REF}" https://github.com/nicocha30/ligolo-ng-web.git .
@@ -22,11 +23,14 @@ curl -fsSL --retry 3 "https://github.com/$REPO/releases/download/$TAG/$ASSET" \
 | tar -xz -C /opt/ligolo-ng proxy \
 && rm -f $ASSET
 
-COPY --chmod=0644 ./config/ligolo/ligolo-ng.yaml.tpl /opt/ligolo-ng/ligolo-ng.yaml
+COPY --chmod=0644 ./config/ligolo/ligolo-ng.yaml.tpl /opt/ligolo-ng/ligolo-ng.yaml.tpl
 COPY --chmod=0755 ./entrypoint.sh /usr/local/bin/entrypoint.sh
 
-ARG LIGOLO_ARGS=""
-ENV LIGOLO_ARGS="$LIGOLO_ARGS"
+ENV WEBUI_PORT=8000 \
+    API_HOST=127.0.0.1 \
+    API_PORT=11601 \
+    LIGOLO_ARGS=""
+
 EXPOSE 8000 11601
 ENTRYPOINT ["/sbin/tini","--","/usr/local/bin/entrypoint.sh"]
 

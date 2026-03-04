@@ -3,17 +3,20 @@ name: ${STACK_NAME:-ligolo-ng-aio}
 x-build-args: &x-build-args
   WEBUI_REF: "${WEBUI_REF:-master}"
   LIGOLO_VERSION: "${LIGOLO_VERSION:-latest}"
+  # VITE_API_URL: "http://127.0.0.1:${WEBUI_PORT:-8000}"
 
 x-service-base: &x-service-base
-  environment:
-    LIGOLO_ARGS: "${LIGOLO_ARGS:-selfcert}"
-    LIGOLO_VERSION: "${LIGOLO_VERSION:-latest}"
+  env_file:
+    - .env
+  # environment:
+  #   LIGOLO_ARGS: "${LIGOLO_ARGS:-selfcert}"
+  #   LIGOLO_VERSION: "${LIGOLO_VERSION:-latest}"
   tty: true
   stdin_open: true
+  ## Include your own runtime configs.
   # volumes:
-    # Override default configuration with custom contents.
-    # - ./ligolo-ng.yaml:/opt/ligolo-ng/ligolo-ng.yaml
-    # - ./configs/nginx.conf:/etc/nginx/nginx.conf:ro
+  #   - ./config/ligolo-ng.yaml:/opt/ligolo-ng/ligolo-ng.yaml
+  #   - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
   cap_add:
     - NET_ADMIN
   devices:
@@ -52,7 +55,7 @@ services:
         - "${WEBUI_HOST:-127.0.0.1}:${WEBUI_PORT:-8000}:${WEBUI_PORT_MAP:-8000}"
         - "${AGENT_HOST:-0.0.0.0}:${AGENT_PORT:-11601}:${AGENT_PORT_MAP:-11601}"
     networks:
-      - ligolo-net
+        - ligolo-net
     container_name: "${CONTAINER_NAME:-${STACK_NAME:-ligolo-aio}}-full"
     profiles: ["full-bridge"]
 
@@ -85,6 +88,6 @@ networks:
     ipam:
       driver: default
       config:
-        # NOTE: We are using CGNAT range for the ligolo container to avoid IP conflicts when targeting internal networks
+        # NOTE: We are using CGNAT range for the ligolo container to avoid potential IP conflicts with target environments
         - subnet: 100.96.10.0/24
           gateway: 100.96.10.1

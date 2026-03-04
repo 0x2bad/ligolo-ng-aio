@@ -1,11 +1,11 @@
 web:
     behindreverseproxy: true
     corsallowedorigin:
-        - http://127.0.0.1:8000
+        - http://${WEBUI_HOST}:${WEBUI_PORT}
     debug: false
     enabled: true
     enableui: true
-    listen: 127.0.0.1:8080
+    listen: ${API_HOST}:${API_PORT}
     logfile: ui.log
     secret:
     tls:
