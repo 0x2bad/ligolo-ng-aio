@@ -10,6 +10,9 @@ The **Ligolo-ng All-in-One** project simplifies the deployment and management of
 
 ## Quick Start
 
+> [!TIP]
+> Default credentials for the web UI: `ligolo:password`
+
 ### 1. Clone
 
 ```bash
